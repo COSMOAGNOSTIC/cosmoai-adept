@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+.env
+secrets/
+sandboxes/
+*.db
+
+.vscode/
+.idea/
