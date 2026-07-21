@@ -1,6 +1,39 @@
 # cosmoai-adept
 
+[![tests](https://github.com/COSMOAGNOSTIC/cosmoai-adept/actions/workflows/tests.yml/badge.svg)](https://github.com/COSMOAGNOSTIC/cosmoai-adept/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A LangGraph-based framework for building multiple independent AI agents (Discord bots, CLI tools, etc.) that share one core library. Originally extracted and generalized from a production multi-agent system that has run continuously in a real deployment for months.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Entrypoints["Thin Entrypoints"]
+        A1["Discord Bot"]
+        A2["CLI Tool"]
+        A3["..."]
+    end
+
+    subgraph Core["agent_core (shared library)"]
+        Spec["AgentSpec<br/>name · prompt · tools · sandbox · model"]
+        Build["build_agent()"]
+        Graph["Compiled LangGraph<br/>ReAct Agent"]
+        Sandbox["safe_path()<br/>sandbox wall"]
+        Memory[("SQLite Checkpointer<br/>per-agent memory")]
+        Tools["Pluggable Tool Library<br/>file I/O · search · TTS · weather · digest"]
+    end
+
+    A1 --> Spec
+    A2 --> Spec
+    A3 --> Spec
+    Spec --> Build --> Graph
+    Graph --> Sandbox
+    Graph --> Memory
+    Graph --> Tools
+```
+
+Each entrypoint is a thin script that supplies an `AgentSpec` — the framework does the rest. Every compiled agent shares the same sandbox enforcement, memory backend, and tool library; nothing is duplicated per-agent.
 
 ## Core Architectural Principles
 
@@ -18,14 +51,14 @@ A LangGraph-based framework for building multiple independent AI agents (Discord
 
 ```
 agent_core/
-    config.py     environment-based configuration
-    security.py   safe_path sandbox wall
-    agent.py      AgentSpec consumer, ReAct graph factory
-    memory.py     SQLite checkpointer factory
-    spec.py       AgentSpec dataclass
-    text.py       content normalizer, chunk splitter
-    tools/        one implementation per tool
-tests/            full pytest suite, one file per module
+config.py environment-based configuration
+security.py safe_path sandbox wall
+agent.py AgentSpec consumer, ReAct graph factory
+memory.py SQLite checkpointer factory
+spec.py AgentSpec dataclass
+text.py content normalizer, chunk splitter
+tools/ one implementation per tool
+tests/ full pytest suite, one file per module
 ```
 
 ## Installation
@@ -41,3 +74,7 @@ pytest -v
 ```
 
 A GitHub Actions workflow runs the full suite on Python 3.11 and 3.12 for every push and pull request.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
