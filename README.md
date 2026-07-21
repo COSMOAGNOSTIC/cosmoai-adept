@@ -35,6 +35,32 @@ flowchart TB
 
 Each entrypoint is a thin script that supplies an `AgentSpec` — the framework does the rest. Every compiled agent shares the same sandbox enforcement, memory backend, and tool library; nothing is duplicated per-agent.
 
+## Quick Start
+
+```python
+from agent_core.spec import AgentSpec
+from agent_core.agent import build_agent
+from agent_core.tools.weather import get_weather
+
+spec = AgentSpec(
+    name="weather-bot",
+    system_prompt="You are a terse weather assistant. Answer only with current conditions.",
+    tools=[get_weather],
+    sandbox="./sandboxes/weather-bot",
+)
+
+graph = build_agent(spec)
+
+result = graph.invoke(
+    {"messages": [("user", "What's it like in Bremerton, WA right now?")]},
+    config={"configurable": {"thread_id": "weather-bot"}},
+)
+
+print(result["messages"][-1].content)
+```
+
+That's the whole contract: define an `AgentSpec`, hand it to `build_agent()`, and you get back a compiled, checkpointed LangGraph agent. Swap `system_prompt`, `tools`, and `sandbox` and you have a different agent — no framework code duplicated. `thread_id` scopes conversation memory, so a Discord channel ID or CLI session ID keeps each conversation's history separate within the same agent's SQLite database.
+
 ## Core Architectural Principles
 
 **Spec-driven agents.** Every agent is defined by an `AgentSpec` - a name, system prompt, tool list, sandbox path, and model choice. `build_agent()` turns a spec into a compiled LangGraph ReAct graph. Adding a new agent means writing a spec and a thin entrypoint, not duplicating framework code.
