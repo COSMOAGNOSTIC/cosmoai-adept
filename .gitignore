@@ -12,3 +12,6 @@ sandboxes/
 
 .vscode/
 .idea/
+
+# Godot editor cache (regenerated automatically; .import files are kept)
+visualizer/.godot/
