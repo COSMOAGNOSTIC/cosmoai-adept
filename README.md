@@ -3,7 +3,7 @@
 [![tests](https://github.com/COSMOAGNOSTIC/cosmoai-adept/actions/workflows/tests.yml/badge.svg)](https://github.com/COSMOAGNOSTIC/cosmoai-adept/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**A real-time spatial visualizer and telemetry dashboard for multi-agent systems**, built on a LangGraph-based framework for multiple independent AI agents (Discord bots, CLI tools, etc.) that share one core library. Originally extracted and generalized from a production multi-agent system that has run continuously in a real deployment for months.
+**A real-time spatial visualizer and telemetry dashboard for multi-agent systems**, built on a LangGraph-based framework for multiple independent AI agents (Discord bots, CLI tools, etc.) that share one core library. Originally extracted and generalized from a real, continuously-running personal deployment — every agent has stayed operational for months with no framework rewrites — built primarily to prove the architecture holds up under real use, not to serve high daily volume.
 
 ![Agent walking between tool stations in the Godot 4 visualizer, driven live by agent_core WebSocket events](docs/visualizer-demo.gif)
 
