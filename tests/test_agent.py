@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock, patch
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 from agent_core.spec import AgentSpec
 
 
@@ -8,6 +10,17 @@ from agent_core.spec import AgentSpec
 def boom(x: str) -> str:
     """A tool that always fails, to exercise error recovery."""
     raise RuntimeError("kaboom")
+
+
+class _LegacySandboxInput(BaseModel):
+    sandbox: str = Field(description="a tool that (incorrectly) takes sandbox as a model argument")
+    filename: str = Field(default="x")
+
+
+@tool(args_schema=_LegacySandboxInput)
+def _legacy_sandbox_tool(sandbox: str, filename: str = "x") -> str:
+    """Stand-in for a tool that reintroduces the model-controlled sandbox escape."""
+    return "should never build"
 
 
 @tool
@@ -149,3 +162,35 @@ def test_local_backend_falls_back_to_config_base_url(tmp_path):
         _build_model(spec)
         _, kwargs = mock_cls.call_args
         assert kwargs["base_url"] == "http://localhost:1234/v1"
+
+
+def test_build_agent_rejects_a_tool_with_a_model_controlled_sandbox(tmp_path):
+    """
+    A tool that takes `sandbox` as a model-supplied argument lets the model
+    choose its own sandbox root and escape the intended one entirely -
+    build_agent() must refuse to build an agent around such a tool rather
+    than silently accepting it. Regression test for that fix.
+    """
+    from agent_core.agent import build_agent
+
+    spec = AgentSpec(
+        name="test",
+        system_prompt="you are a test agent",
+        tools=[_legacy_sandbox_tool],
+        sandbox=str(tmp_path),
+    )
+    with pytest.raises(ValueError, match="model-controlled"):
+        build_agent(spec)
+
+
+def test_build_agent_accepts_tools_with_no_sandbox_argument(tmp_path):
+    from agent_core.agent import build_agent
+
+    with patch("agent_core.agent.ChatAnthropic"):
+        spec = AgentSpec(
+            name="test",
+            system_prompt="you are a test agent",
+            tools=[boom],
+            sandbox=str(tmp_path),
+        )
+        build_agent(spec)  # should not raise

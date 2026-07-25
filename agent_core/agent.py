@@ -37,13 +37,42 @@ class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
 
 
+def _assert_no_model_controlled_sandbox(spec: AgentSpec) -> None:
+    """
+    Defense in depth for the sandbox trust boundary: no tool bound to this
+    agent may expose `sandbox` as a model-supplied argument. The sandbox
+    root must be bound at tool-construction time (see tools/files.py's
+    make_file_tools() and its siblings), never chosen by the model - a
+    model that picks its own sandbox root can point `safe_path()` anywhere
+    it likes, since safe_path only guards escape *within* whatever root
+    it's handed.
+
+    This used to be true only by convention (the tool modules simply
+    didn't take a `sandbox` argument) - it's enforced here as well so a
+    future tool can't silently reintroduce the escape and have nothing
+    catch it before it reaches a model.
+    """
+    for t in spec.tools:
+        schema = getattr(t, "args_schema", None)
+        field_names = set(getattr(schema, "model_fields", {}).keys()) if schema else set()
+        if "sandbox" in field_names:
+            raise ValueError(
+                f"Tool '{t.name}' exposes 'sandbox' as a model-controlled argument. "
+                "Bind the sandbox path at tool-construction time instead - see "
+                "agent_core/tools/files.py's make_file_tools() for the pattern."
+            )
+
+
 def build_agent(spec: AgentSpec):
     """
     Build and compile a ReAct LangGraph agent from an AgentSpec.
     - Tools bound via bind_tools - never listed in prose prompts
     - Tool errors returned as ToolMessages so the model can recover
     - Checkpointer scoped to agent sandbox - one DB per agent
+    - No bound tool may accept `sandbox` as a model-supplied argument
     """
+    _assert_no_model_controlled_sandbox(spec)
+
     model = _build_model(spec)
 
     checkpointer = make_checkpointer(spec.sandbox, spec.name)

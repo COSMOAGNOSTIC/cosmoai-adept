@@ -92,15 +92,30 @@
 
 ---
 
+## Phase 6.5 — External review response: sandbox trust boundary + quick-start fix
+
+This phase exists because it should never have been possible to get this far without it — an independent Fable-model code review (run against the public repo, no shared context with prior sessions) found two concrete defects, both confirmed by direct reproduction before fixing:
+
+- [x] **Sandbox trust boundary fix (the important one):** every file/log/digest/tts tool previously took `sandbox` as a model-supplied tool argument. `safe_path()` itself was always correct, but it only guards escape *within* whatever root it's handed — and the model chose the root. Reproduced directly: `read_file.invoke({"sandbox": "/etc", "filename": "hostname"})` returned the host's real `/etc/hostname` before this fix. Fixed by moving `sandbox` out of every tool's input schema and into a closure bound once at construction time (`make_file_tools(sandbox)`, `make_log_tools(sandbox)`, `make_digest_tool(sandbox)`, `make_tts_tool(sandbox)`) — the model can no longer supply a value that doesn't exist as a parameter. `agent.py`'s new `_assert_no_model_controlled_sandbox()` enforces this at `build_agent()` time as defense in depth, so a future tool can't silently reintroduce the escape.
+- [x] **Quick-start crash fix:** `make_checkpointer()` opened a SQLite file inside `sandbox` without creating the directory first — the README's own Quick Start and `examples/cli_demo.py` both crashed with `OperationalError` on a clean checkout, before an agent had ever run once. Fixed with `os.makedirs(sandbox, exist_ok=True)`.
+- [x] Verified: 8 new tests (sandbox-argument-rejection tests on every tool factory, a cross-sandbox isolation test, a `build_agent()` regression test that a reintroduced `sandbox` argument is rejected, a fresh-sandbox smoke test) — 50/50 passing, up from 42.
+- [x] ARCHITECTURE.md §4 rewritten to describe the fix and the reasoning, not just the current state; ADR-009 added; Known Debt gained two honestly-disclosed items found in the same review (symlink TOCTOU race, no dependency pinning) that are *not* fixed yet.
+
+**Definition of done:** ✅ Complete — both defects reproduced, fixed, and covered by a regression test that would have caught them; `pytest -v` green (50 tests); the exploit re-run against the fixed code confirmed blocked (see PASSDOWN.md for the verification transcript).
+
+---
+
 ## Phase 7 — Lock it in
 
 - [ ] Event schema versioning (`schema_version` field) before a second consumer is built against it
 - [ ] Swap procedural visualizer graphics for a CC0 tileset (see `visualizer/README.md`) — note: superseded for now by the committed Circuit asset set; revisit if a richer look is wanted later
-- [ ] Eval harness: scripted scenarios scoring agent output quality
+- [ ] Eval harness: scripted scenarios scoring agent output quality — flagged independently by three reviewers (Fable, and two external recruiter-perspective AI assessments) as the single highest-leverage next investment
 - [ ] History windowing for long-running threads
 - [ ] Approval hook reference implementation beyond CLI (Discord reaction or similar)
+- [ ] Symlink TOCTOU race in `safe_path()` (re-validate post-open or use `O_NOFOLLOW`)
+- [ ] Dependency version pinning / lockfile
 
-**Definition of done:** Event schema versioned, eval harness scores at least one scenario end to end, at least one non-CLI approval hook shipped as reference.
+**Definition of done:** Event schema versioned, eval harness scores at least one scenario end to end, at least one non-CLI approval hook shipped as reference, dependencies pinned.
 
 ---
 
@@ -115,4 +130,5 @@
 | 4 — Live spatial visualizer | ✅ | 2026-07-25 |
 | 5 — Visualizer skin + bubble timing | ✅ | 2026-07-25 |
 | 6 — HITL approval + local backend | ✅ | 2026-07-25 |
+| 6.5 — External review response (sandbox fix + quick-start fix) | ✅ | 2026-07-25 |
 | 7 — Lock it in | ⬜ | |

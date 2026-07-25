@@ -8,7 +8,6 @@ from agent_core.config import TAVILY_API_KEY
 
 
 class DigestInput(BaseModel):
-    sandbox: str = Field(description="Agent sandbox directory path")
     topic: str = Field(
         default="AI agent frameworks",
         description="Topic to pull live search results for",
@@ -30,31 +29,41 @@ def _get_news(topic: str) -> str:
         return f"## News\nUnavailable: {e}"
 
 
-@tool(args_schema=DigestInput)
-def assemble_digest(sandbox: str, topic: str = "AI agent frameworks") -> str:
+def make_digest_tool(sandbox: str):
     """
-    Assemble a scheduled digest: sandbox state (pending items, recent activity
-    log) plus live search results on `topic`, into one report. Single
-    implementation shared by every scheduled trigger and every agent.
+    Build assemble_digest bound to a single sandbox root, closed over here
+    rather than accepted as a model-supplied argument - see files.py's
+    make_file_tools() docstring for why.
     """
-    now = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
-    sections = [f"# Digest\n{now}\n"]
 
-    pending_path = safe_path(sandbox, "pending.txt")
-    if os.path.exists(pending_path):
-        with open(pending_path, "r", encoding="utf-8") as f:
-            pending = f.read().strip()
-        sections.append(f"## Pending Items\n{pending}" if pending else "## Pending Items\nNone.")
-    else:
-        sections.append("## Pending Items\nNone.")
+    @tool(args_schema=DigestInput)
+    def assemble_digest(topic: str = "AI agent frameworks") -> str:
+        """
+        Assemble a scheduled digest: sandbox state (pending items, recent
+        activity log) plus live search results on `topic`, into one report.
+        Single implementation shared by every scheduled trigger and every
+        agent.
+        """
+        now = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        sections = [f"# Digest\n{now}\n"]
 
-    log_path = safe_path(sandbox, "activity_log.txt")
-    if os.path.exists(log_path):
-        with open(log_path, "r", encoding="utf-8") as f:
-            recent = "".join(f.readlines()[-10:]).strip()
-        sections.append(f"## Recent Activity\n{recent}" if recent else "## Recent Activity\nNo log entries yet.")
-    else:
-        sections.append("## Recent Activity\nNo log entries yet.")
+        pending_path = safe_path(sandbox, "pending.txt")
+        if os.path.exists(pending_path):
+            with open(pending_path, "r", encoding="utf-8") as f:
+                pending = f.read().strip()
+            sections.append(f"## Pending Items\n{pending}" if pending else "## Pending Items\nNone.")
+        else:
+            sections.append("## Pending Items\nNone.")
 
-    sections.append(_get_news(topic))
-    return "\n\n".join(sections)
+        log_path = safe_path(sandbox, "activity_log.txt")
+        if os.path.exists(log_path):
+            with open(log_path, "r", encoding="utf-8") as f:
+                recent = "".join(f.readlines()[-10:]).strip()
+            sections.append(f"## Recent Activity\n{recent}" if recent else "## Recent Activity\nNo log entries yet.")
+        else:
+            sections.append("## Recent Activity\nNo log entries yet.")
+
+        sections.append(_get_news(topic))
+        return "\n\n".join(sections)
+
+    return assemble_digest

@@ -26,22 +26,27 @@ import sys
 from agent_core.spec import AgentSpec
 from agent_core.agent import build_agent
 from agent_core.tools.weather import get_weather
-from agent_core.tools.digest import assemble_digest
-from agent_core.tools.log import write_log, read_pending, add_pending, complete_pending
-from agent_core.tools.files import read_file, write_file, list_files
+from agent_core.tools.digest import make_digest_tool
+from agent_core.tools.log import make_log_tools
+from agent_core.tools.files import make_file_tools
 
 SANDBOX = "./sandboxes/cli-demo"
 USE_LOCAL_BACKEND = "--local" in sys.argv
+
+# Sandbox is bound here, once, by the entrypoint - never handed to the
+# model as a tool argument. See agent_core/tools/files.py's
+# make_file_tools() docstring for why that distinction matters.
+read_file, write_file, list_files = make_file_tools(SANDBOX)
+write_log, read_pending, add_pending, complete_pending = make_log_tools(SANDBOX)
+assemble_digest = make_digest_tool(SANDBOX)
 
 spec = AgentSpec(
     name="cli-demo",
     system_prompt=(
         "You are a terse, helpful assistant with tools for weather, a "
         "sandboxed scratchpad, activity logging, and a digest that pulls "
-        f"your pending items plus live search results into one report. "
-        f"Your sandbox directory is '{SANDBOX}' - pass it as the `sandbox` "
-        "argument to any tool that requires one. Prefer using tools over "
-        "guessing."
+        "your pending items plus live search results into one report. "
+        "Prefer using tools over guessing."
     ),
     tools=[
         get_weather,

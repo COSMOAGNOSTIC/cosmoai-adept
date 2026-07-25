@@ -5,7 +5,30 @@
 
 ---
 
-## 2026-07-25 (latest) — HITL approval gate + local LLM backend
+## 2026-07-25 (latest) — External review response: sandbox trust boundary + quick-start fix
+
+**Where things stood coming in:** the two public repos (this one and `Watchstander`) went through an independent Fable-model code/architecture/security review, plus two external recruiter-perspective assessments (ChatGPT, Grok) that Donnie ran separately and brought back for comparison. Fable found two concrete, reproducible defects in this repo that the recruiter assessments — reading docs and READMEs rather than tracing code — had both praised uncritically: the "mechanical, tool-layer sandbox" claim, and (separately) a broken quick-start.
+
+**What got found and verified before fixing:**
+- **Sandbox trust boundary was only half-enforced.** Every file/log/digest/tts tool took `sandbox` as a *model-supplied* tool argument. `safe_path()` was always correct at blocking `..`/absolute-path/symlink escape — but only *within* whatever root it was handed, and the model chose the root. Reproduced directly: `read_file.invoke({"sandbox": "/etc", "filename": "hostname"})` returned the real host `/etc/hostname`, not an error. This directly contradicted the "security lives in the tool layer, not the prompt layer" principle that's been in ARCHITECTURE.md since Phase 0 — the principle was aspirational for this one boundary, not actually true in code.
+- **Quick-start crash on a clean checkout.** `make_checkpointer()` opened a SQLite file inside `sandbox` without `os.makedirs()` first. Anyone following the README's own Quick Start, or running `examples/cli_demo.py` fresh, hit `OperationalError` before the agent ever ran once.
+
+**What got built:**
+- `tools/files.py`, `tools/log.py`, `tools/digest.py`, `tools/tts.py` rewritten as `make_*_tools(sandbox)` factories — `sandbox` is now a Python closure variable bound once by whoever constructs the tools (the entrypoint, e.g. `examples/cli_demo.py`), and is no longer a field in any tool's input schema at all. The model cannot supply a value for a parameter that doesn't exist.
+- `agent.py`'s new `_assert_no_model_controlled_sandbox()` runs at `build_agent()` time and raises if any bound tool's schema still contains a `sandbox` field — this is defense in depth so a future tool can't silently reintroduce the exact same escape and have nothing catch it.
+- `memory.py`'s `make_checkpointer()` now creates the sandbox directory before opening the database.
+- `examples/cli_demo.py` updated to build its tools via the new factories; the system prompt no longer needs to tell the model to "pass sandbox as an argument" (there's nothing left for it to pass).
+- 8 new tests: every tool factory has a test asserting `"sandbox" not in args_schema.model_fields`, a cross-sandbox isolation test (two agents built with different sandboxes can't see each other's files), a `build_agent()` regression test with a deliberately reintroduced "legacy" sandbox-taking tool (asserts it's rejected), and a fresh-sandbox smoke test for the quick-start fix. 50/50 tests passing (up from 42).
+- Manually re-ran the exact exploit from the Fable review against the fixed code: the model-supplied `sandbox="/etc"` argument is now silently ignored (extra field, not in the schema) and the tool reads from the real bound sandbox instead — confirmed the host file is never touched.
+- ARCHITECTURE.md §4 rewritten to describe *why* this fix exists, not just the current state (a "doc that only shows the destination" would have hidden the same class of bug from the next reviewer); ADR-009 added; two more honestly-disclosed-but-not-yet-fixed items added to Known Debt (symlink TOCTOU race, no dependency pinning) that came out of the same review — they weren't in scope for this pass, but they're real and now tracked instead of quietly omitted.
+
+**Decided but not built:** the TOCTOU race and dependency pinning noted above; the Watchstander-side fixes from the same review round (broken graph import, HITL decision not structurally enforced) are a separate PASSDOWN entry in that repo.
+
+**Open questions for next session:** the eval-harness gap was independently flagged by three separate reviewers now (Fable, ChatGPT, Grok) as the highest-leverage next investment — worth prioritizing over further polish. Also worth deciding: should `_assert_no_model_controlled_sandbox()`'s pattern (a runtime invariant check at `build_agent()` time) become a general convention for other trust-boundary assumptions in this framework, rather than a one-off fix?
+
+---
+
+## 2026-07-25 (earlier same day) — HITL approval gate + local LLM backend
 
 **Where things stood coming in:** an externally-pasted PASSDOWN document (from a different session) proposed a HITL "Approval Switch" and a local-LLM-backend integration as open TODOs. Cross-checking it against the actual repo showed most of that document's other items were already done (LICENSE, events.py, visualizer, Mermaid diagram) — but these two were genuinely new scope, and non-trivial enough (direct-attention features, not background plumbing) to build and document properly rather than skip.
 

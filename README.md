@@ -107,7 +107,7 @@ python examples/cli_demo.py --local
 
 **Spec-driven agents.** Every agent is defined by an `AgentSpec` - a name, system prompt, tool list, sandbox path, and model choice. `build_agent()` turns a spec into a compiled LangGraph ReAct graph. Adding a new agent means writing a spec and a thin entrypoint, not duplicating framework code.
 
-**Sandboxed file access.** All file tools resolve paths through `safe_path()`, a mechanical wall that rejects any attempt to escape an agent's sandbox directory via `..` sequences, absolute paths, or symlinks - enforced at the tool layer, not the prompt layer.
+**Sandboxed file access.** All file tools resolve paths through `safe_path()`, a mechanical wall that rejects any attempt to escape an agent's sandbox directory via `..` sequences, absolute paths, or symlinks - enforced at the tool layer, not the prompt layer. The sandbox root itself is bound once via each tool module's `make_*_tools(sandbox)` factory (`tools/files.py`, `tools/log.py`, etc.) when the entrypoint constructs its tools, not passed in by the model - `build_agent()` refuses to build an agent around any tool that still takes `sandbox` as an argument. See ARCHITECTURE.md §4 / ADR-009.
 
 **Per-agent persistent memory.** Conversation state is checkpointed via LangGraph's SQLite saver, one database per agent, so each agent resumes exactly where it left off.
 
