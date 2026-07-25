@@ -60,7 +60,6 @@ Threat: prompt injection via search results and other tool output landing in mod
 | Item | Notes |
 |---|---|
 | History windowing | Long threads will eventually need summarize-and-truncate |
-| Visualizer assets | Procedural placeholder graphics; CC0 tileset swap documented in `visualizer/README.md` |
 | Event schema versioning | No `schema_version` field yet — fine at one consumer, needed before a second |
 | Eval harness | Scripted scenarios scoring agent output quality |
 
@@ -73,6 +72,7 @@ Threat: prompt injection via search results and other tool output landing in mod
 | ADR-003 | 2026-06 | Tool errors return as messages, never raise | Agent should see and recover from failures, not crash the run |
 | ADR-004 | 2026-07 | `events.py` as a lazy, no-op-by-default WebSocket broadcaster | Wanted live observability without coupling `agent_core` to any specific front end, and without cost when nothing's watching |
 | ADR-005 | 2026-07 | Godot 4 for the reference visualizer, not a web canvas | Native `WebSocketPeer`, tiny footprint, headless CLI builds for CI/demo recording, and it's the right tool if this grows into a richer spatial dashboard |
+| ADR-006 | 2026-07 | "Circuit" (dark HUD/telemetry) skin over an RPG/office look for this public repo | Reads as systems observability to a recruiter/reviewer, not a game — chosen after reviewing static mockups of both directions |
 
 ## 9. Maintenance Rules
 

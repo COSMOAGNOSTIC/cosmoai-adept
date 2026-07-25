@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-07-25 (later same day) — Visualizer skin: Circuit
+
+**Where things stood coming in:** first visualizer pass used flat `ColorRect` placeholders and a fixed 1.8s speech bubble regardless of text length — too fast to read, especially in a recorded demo.
+
+**What got built:**
+- Chose "Circuit" skin after reviewing static mockups against a rejected alternative pair (sci-fi vs. RPG office/cottage look) — went sci-fi/telemetry for this public repo specifically, since it reads as systems observability rather than a game.
+- `visualizer/assets/gen_assets.py` — generates `bg_circuit.png` (dark grid + vignette), `node_glow.png` (radial glow, tinted per station via `Sprite2D.modulate`), `scanlines.png` (CRT overlay). Committed output, not generated at runtime.
+- `Main.gd` rewritten: glowing station nodes, right-angle circuit-trace lines from agent to whichever station it's headed to, diamond-shaped pulsing agent core, HUD-style bordered speech bubble.
+- Speech bubble timing fixed: `clamp(text.length() / 12, 3.0, 7.0)` seconds instead of a flat 1.8s — floor keeps even "done" legible, cap keeps a long response from stalling the scene.
+- `demo_broadcaster.py` step interval bumped 1.4s → 3.2s to match the new floor, so the recorded GIF is actually readable.
+- Re-recorded demo GIF, re-embedded in README.md.
+
+**Decided but not built:**
+- Kenney.nl CC0 tileset swap (originally planned) is superseded by the Circuit direction for this repo — no longer the plan here. `cosmo-core`'s sibling visualizer went the pixel-art office route instead; see that repo's PASSDOWN.md.
+
+**Open questions for next session:**
+- None outstanding on the visualizer itself. Phase 5 items (event schema versioning, eval harness) are still open, unrelated to this skin work.
+
+---
+
 ## 2026-07-25 — Observability, digest tool, live visualizer
 
 **Where things stood coming in:** `agent_core` had a full tool library (files, log, search, weather, tts) and a full test suite, but no real entrypoint — the README's Quick Start was a snippet, not a runnable script — and no digest tool despite the README describing one.

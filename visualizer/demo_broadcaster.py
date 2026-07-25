@@ -50,7 +50,10 @@ def main() -> None:
     print("Replaying demo sequence.")
     for event_type, payload in SCRIPT:
         broadcaster.emit(event_type, **payload)
-        time.sleep(1.4)
+        # Paced to match the visualizer's minimum bubble read time (3s floor)
+        # so a human watching the demo - or the recorded GIF - can actually
+        # read each one before it's replaced.
+        time.sleep(3.2)
     print("Done.")
 
 
