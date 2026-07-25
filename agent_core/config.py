@@ -19,6 +19,11 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
+# Local, OpenAI-compatible LLM server (e.g. LM Studio) - used when an
+# AgentSpec sets backend="local". Lets the whole framework run against a
+# GPU-offloaded local model with zero API cost and zero network egress.
+LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:1234/v1")
+
 
 def discord_token(agent_name: str) -> str | None:
     """Look up an agent's Discord bot token, e.g. DISCORD_BOT_TOKEN_<NAME>."""

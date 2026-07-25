@@ -20,17 +20,23 @@ flowchart TB
     end
 
     subgraph Core["agent_core (shared library)"]
-        Spec["AgentSpec<br/>name · prompt · tools · sandbox · model"]
+        Spec["AgentSpec<br/>name · prompt · tools · sandbox · model · backend"]
         Build["build_agent()"]
         Graph["Compiled LangGraph<br/>ReAct Agent"]
         Sandbox["safe_path()<br/>sandbox wall"]
+        Approval["approvals.py<br/>human-in-the-loop gate"]
         Memory[("SQLite Checkpointer<br/>per-agent memory")]
         Tools["Pluggable Tool Library<br/>file I/O · search · TTS · weather · digest"]
         Events["events.py<br/>WebSocket broadcaster"]
     end
 
+    subgraph Models["Model Backend"]
+        Anthropic["Claude API"]
+        Local["Local server<br/>LM Studio, etc."]
+    end
+
     subgraph Viz["Live Visualizer (Godot 4)"]
-        Godot["2D spatial scene<br/>agent walks to tool stations"]
+        Godot["2D spatial scene<br/>agent walks to tool + approval stations"]
     end
 
     A1 --> Spec
@@ -38,9 +44,12 @@ flowchart TB
     A3 --> Spec
     Spec --> Build --> Graph
     Graph --> Sandbox
+    Graph --> Approval
     Graph --> Memory
     Graph --> Tools
     Graph --> Events
+    Graph -.-> Anthropic
+    Graph -.-> Local
     Events -. "ws://localhost:8080" .-> Godot
 ```
 
@@ -82,6 +91,18 @@ python examples/cli_demo.py
 
 `agent_core` broadcasts a WebSocket event on every model call and tool call — no configuration needed, it's a no-op until something connects. Open [`visualizer/`](visualizer/README.md) in Godot 4, run the main scene, then run the CLI demo (or [`visualizer/demo_broadcaster.py`](visualizer/demo_broadcaster.py) if you just want to see it move without an API key) and watch the agent walk between tool stations in real time.
 
+## Human-in-the-Loop Approval
+
+Any tool name in an `AgentSpec`'s `approval_required` set pauses before it runs — the agent walks to the Approval node in the visualizer and waits for a `approval_hook(tool_name, args) -> bool` to return before proceeding. No hook supplied means a blocking terminal y/N prompt ([`agent_core/approvals.py`](agent_core/approvals.py)) — fine for a CLI, wrong for anything unattended, so supply your own hook (a Discord reaction, a Slack button) for those. `examples/cli_demo.py` gates `write_file` this way.
+
+## Local LLM Backend
+
+Set `backend="local"` on an `AgentSpec` and `build_agent()` points the same ReAct loop at any OpenAI-compatible local server instead of the Claude API — LM Studio serving Qwen2.5-Coder or Gemma on `localhost:1234`, for example. Same tools, same graph, same visualizer telemetry; only the model client changes. `LOCAL_LLM_BASE_URL` in `.env` sets the default, or set `local_base_url` per-spec. Try it:
+
+```
+python examples/cli_demo.py --local
+```
+
 ## Core Architectural Principles
 
 **Spec-driven agents.** Every agent is defined by an `AgentSpec` - a name, system prompt, tool list, sandbox path, and model choice. `build_agent()` turns a spec into a compiled LangGraph ReAct graph. Adding a new agent means writing a spec and a thin entrypoint, not duplicating framework code.
@@ -96,6 +117,10 @@ python examples/cli_demo.py
 
 **Observable by default.** `events.py` broadcasts every model call and tool call over a WebSocket, so any front end — the bundled Godot visualizer, a web dashboard, a log aggregator — can watch an agent think without touching agent internals.
 
+**Human approval as a mechanical gate.** A tool name in `approval_required` pauses before it runs, full stop — not a prompt instruction the model could talk itself out of. Same pattern as `safe_path()`: enforced at the tool-execution layer, not the prompt layer.
+
+**Swappable model backend.** `AgentSpec.backend` picks Anthropic or any OpenAI-compatible local server — same spec, same tools, same graph either way.
+
 ## Structure
 
 ```
@@ -104,6 +129,7 @@ config.py environment-based configuration
 security.py safe_path sandbox wall
 agent.py AgentSpec consumer, ReAct graph factory
 events.py WebSocket event broadcaster
+approvals.py human-in-the-loop approval hook
 memory.py SQLite checkpointer factory
 spec.py AgentSpec dataclass
 text.py content normalizer, chunk splitter

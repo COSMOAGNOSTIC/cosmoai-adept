@@ -15,6 +15,7 @@ setup(
         "elevenlabs",
         "discord.py",
         "websockets",
+        "langchain-openai",
     ],
     extras_require={
         "dev": ["pytest"],

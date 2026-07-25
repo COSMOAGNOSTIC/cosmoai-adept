@@ -31,12 +31,18 @@ SCRIPT = [
     ("tool_start", {"agent": "cli-demo", "tool": "write_log"}),
     ("tool_end", {"agent": "cli-demo", "tool": "write_log", "ok": True}),
     ("model_start", {"agent": "cli-demo"}),
+    ("model_end", {"agent": "cli-demo", "tool_calls": ["write_file"], "text": ""}),
+    ("awaiting_approval", {"agent": "cli-demo", "tool": "write_file"}),
+    ("approval_decided", {"agent": "cli-demo", "tool": "write_file", "approved": True}),
+    ("tool_start", {"agent": "cli-demo", "tool": "write_file"}),
+    ("tool_end", {"agent": "cli-demo", "tool": "write_file", "ok": True}),
+    ("model_start", {"agent": "cli-demo"}),
     (
         "model_end",
         {
             "agent": "cli-demo",
             "tool_calls": [],
-            "text": "It's 61F and clear in Bremerton, WA. Logged and ready for the next one.",
+            "text": "It's 61F and clear in Bremerton, WA. Logged, saved, ready for the next one.",
         },
     ),
 ]

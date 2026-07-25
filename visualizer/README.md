@@ -40,9 +40,14 @@ effect. `Main.gd` connects as a client using Godot 4's built-in
 | `model_end` (no tool calls) | speech bubble shows the response preview |
 | `tool_start` | agent walks to the station mapped from the tool name |
 | `tool_end` | speech bubble shows "done" or "error" |
+| `awaiting_approval` | agent walks to the "Approval" station, shows "awaiting approval: `<tool>`..." |
+| `approval_decided` | speech bubble shows "approved - proceeding" or "denied by human" |
 
 The tool → station mapping lives in `TOOL_STATION` at the top of
-`Main.gd` — add an entry there for any new tool.
+`Main.gd` — add an entry there for any new tool. Tools in an
+`AgentSpec`'s `approval_required` set emit `awaiting_approval` /
+`approval_decided` instead of walking straight to their station - see
+`agent_core/approvals.py`.
 
 ## Skin: Circuit
 

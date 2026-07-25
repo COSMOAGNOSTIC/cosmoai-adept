@@ -43,6 +43,7 @@ const STATION_LAYOUT := {
 	"DIGEST_DESK": Vector2(810, 110),
 	"LOG": Vector2(150, 430),
 	"FILES": Vector2(810, 430),
+	"APPROVAL": Vector2(480, 470),
 }
 
 const STATION_COLOR := {
@@ -51,6 +52,7 @@ const STATION_COLOR := {
 	"DIGEST_DESK": Color("ffd25a"),
 	"LOG": Color("c878ff"),
 	"FILES": Color("ff6464"),
+	"APPROVAL": Color("ff9d42"),
 }
 
 
@@ -250,6 +252,13 @@ func _handle_event(raw: String) -> void:
 		"tool_end":
 			var ok: bool = parsed.get("ok", true)
 			_say("done" if ok else "error")
+		"awaiting_approval":
+			var tool_name2: String = parsed.get("tool", "")
+			_walk_to("APPROVAL")
+			_say("awaiting approval: %s..." % tool_name2)
+		"approval_decided":
+			var approved: bool = parsed.get("approved", false)
+			_say("approved - proceeding" if approved else "denied by human")
 
 
 func _walk_to(station_key: String) -> void:
