@@ -105,15 +105,30 @@ This phase exists because it should never have been possible to get this far wit
 
 ---
 
+## Phase 6.75 — Second-pass review response: memory trust boundary + guard hardening
+
+This phase exists because closing the sandbox trust boundary in Phase 6.5 didn't fully close the trust boundary — a second, more targeted independent Fable-model review pass (asked to trace `config.py`, `memory.py`, and `agent.py` line by line, not read documentation) found the conversation-memory checkpointer had the same class of bug the file tools just got fixed for, plus two fail-open gaps in the guard that was supposed to prevent regressions.
+
+- [x] **Memory trust boundary fix:** `build_agent()` passed `spec.sandbox` straight to `make_checkpointer()`, so the SQLite checkpoint DB lived inside the exact directory the agent's own file tools are rooted at — a model could read another thread's conversation history or corrupt its own checkpoint DB via its ordinary `write_file` tool. Fixed: new `config.memory_path()` (env-overridable via `MEMORY_<NAME>`, same pattern as `sandbox_path()`) resolves a dedicated per-agent directory that is never a tool sandbox root; `build_agent()` now calls `make_checkpointer(memory_path(spec.name), spec.name)`.
+- [x] **Sandbox-guard hardening:** `_assert_no_model_controlled_sandbox()` used `getattr(schema, "model_fields", {})`, silently passing (empty field set) any schema shape it couldn't introspect (e.g. Pydantic v1's `__fields__`), and matched only the literal string `"sandbox"`. Fixed: an uninspectable schema now raises instead of passing, and a small set of sandbox-root-like names (`sandbox`, `sandbox_dir`, `root`, `base_dir`, etc.) is checked instead of one exact string.
+- [x] **config.py hardening:** a missing `.env` with no `AGENT_SECRETS_DIR` set now warns on stderr at import time instead of silently leaving every `*_API_KEY` constant `None`; `discord_channel_id()` degrades to `0` on a malformed env value instead of raising and crashing the entrypoint at startup.
+- [x] 9 new tests (`tests/test_config.py` new; `tests/test_agent.py` gained 3) covering the alt-named-sandbox rejection, the fail-closed uninspectable-schema case, memory binding outside the sandbox, and all three `config.py` fixes. 59/59 passing, up from 50.
+- [x] ARCHITECTURE.md §4/§5/§9/§10 updated — Memory Model section rewritten to explain why the isolation matters, Security Model's sandbox-root row and its explanatory paragraph updated, Known Debt gained the config silent-misconfiguration item, ADR-010/011/012 added.
+
+**Definition of done:** ✅ Complete — both real trust-boundary/fail-open issues fixed and covered by regression tests; `pytest -v` green (59 tests).
+
+---
+
 ## Phase 7 — Lock it in
 
 - [ ] Event schema versioning (`schema_version` field) before a second consumer is built against it
 - [ ] Swap procedural visualizer graphics for a CC0 tileset (see `visualizer/README.md`) — note: superseded for now by the committed Circuit asset set; revisit if a richer look is wanted later
-- [ ] Eval harness: scripted scenarios scoring agent output quality — flagged independently by three reviewers (Fable, and two external recruiter-perspective AI assessments) as the single highest-leverage next investment
+- [ ] Eval harness: scripted scenarios scoring agent output quality — flagged independently by three reviewers (Fable, and two external recruiter-perspective AI assessments) as the single highest-leverage next investment; Watchstander's sibling repo already has one (see its MIGRATION.md Phase 5.75) as a reference pattern
 - [ ] History windowing for long-running threads
 - [ ] Approval hook reference implementation beyond CLI (Discord reaction or similar)
 - [ ] Symlink TOCTOU race in `safe_path()` (re-validate post-open or use `O_NOFOLLOW`)
 - [ ] Dependency version pinning / lockfile
+- [ ] `config.py`'s module-level env reads are still frozen at import time — the stderr warning added in Phase 6.75 makes a missing `.env` visible, but doesn't make the underlying values reloadable without re-importing the module
 
 **Definition of done:** Event schema versioned, eval harness scores at least one scenario end to end, at least one non-CLI approval hook shipped as reference, dependencies pinned.
 
@@ -131,4 +146,5 @@ This phase exists because it should never have been possible to get this far wit
 | 5 — Visualizer skin + bubble timing | ✅ | 2026-07-25 |
 | 6 — HITL approval + local backend | ✅ | 2026-07-25 |
 | 6.5 — External review response (sandbox fix + quick-start fix) | ✅ | 2026-07-25 |
+| 6.75 — Second-pass review response (memory boundary + guard hardening) | ✅ | 2026-07-25 |
 | 7 — Lock it in | ⬜ | |

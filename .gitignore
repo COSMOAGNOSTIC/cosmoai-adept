@@ -8,6 +8,7 @@ dist/
 .env
 secrets/
 sandboxes/
+agent_memory/
 *.db
 
 .vscode/

@@ -194,3 +194,100 @@ def test_build_agent_accepts_tools_with_no_sandbox_argument(tmp_path):
             sandbox=str(tmp_path),
         )
         build_agent(spec)  # should not raise
+
+
+class _AltNamedSandboxInput(BaseModel):
+    """
+    Same escape as _LegacySandboxInput, but under a different parameter
+    name -- the original guard only matched the literal string "sandbox"
+    and silently passed anything else. Regression fixture for that gap.
+    """
+
+    root: str = Field(description="same trust-boundary bug, different field name")
+    filename: str = Field(default="x")
+
+
+@tool(args_schema=_AltNamedSandboxInput)
+def _alt_named_sandbox_tool(root: str, filename: str = "x") -> str:
+    """Stand-in for a tool that reintroduces the escape under a non-'sandbox' name."""
+    return "should never build"
+
+
+def test_build_agent_rejects_an_alternately_named_sandbox_argument(tmp_path):
+    """
+    An independent code review found the original guard only matched the
+    literal field name "sandbox" -- a tool naming the same parameter
+    "root" or "base_dir" slipped through uninspected. Regression test for
+    the broadened name check.
+    """
+    from agent_core.agent import build_agent
+
+    spec = AgentSpec(
+        name="test",
+        system_prompt="you are a test agent",
+        tools=[_alt_named_sandbox_tool],
+        sandbox=str(tmp_path),
+    )
+    with pytest.raises(ValueError, match="model-controlled"):
+        build_agent(spec)
+
+
+class _UninspectableSchema:
+    """Stands in for an args_schema shape the guard has no way to introspect -- neither
+    Pydantic v2's `model_fields` nor v1's `__fields__`."""
+
+
+def test_build_agent_fails_closed_on_an_uninspectable_schema(tmp_path):
+    """
+    An independent code review found the original guard used
+    `getattr(schema, "model_fields", {})`, which silently returns an empty
+    set -- and therefore silently PASSES -- for any schema shape it can't
+    introspect (e.g. a Pydantic v1 model, which uses `__fields__` instead).
+    A security assertion must fail closed on "I can't tell," not pass by
+    default. Regression test: a tool with a genuinely uninspectable schema
+    must raise, not build successfully.
+    """
+    from agent_core.agent import build_agent
+
+    fake_tool = MagicMock()
+    fake_tool.name = "uninspectable_tool"
+    fake_tool.args_schema = _UninspectableSchema
+
+    spec = AgentSpec(
+        name="test",
+        system_prompt="you are a test agent",
+        tools=[fake_tool],
+        sandbox=str(tmp_path),
+    )
+    with pytest.raises(ValueError, match="cannot inspect"):
+        build_agent(spec)
+
+
+def test_build_agent_binds_memory_outside_the_sandbox(tmp_path, monkeypatch):
+    """
+    An independent code review found the SQLite checkpointer used to live
+    inside the agent's own sandbox directory -- the same directory its
+    file tools are bound to -- so the model could read or corrupt its own
+    conversation memory through ordinary sandboxed file tools. Regression
+    test: build_agent() must put the checkpoint DB somewhere the model's
+    own tools cannot reach, never inside spec.sandbox.
+    """
+    from agent_core.agent import build_agent
+
+    memory_root = tmp_path / "memory-root"
+    monkeypatch.setattr("agent_core.agent.memory_path", lambda name: str(memory_root))
+
+    sandbox_dir = tmp_path / "sandbox"
+    with patch("agent_core.agent.ChatAnthropic"):
+        spec = AgentSpec(
+            name="test",
+            system_prompt="you are a test agent",
+            tools=[boom],
+            sandbox=str(sandbox_dir),
+        )
+        build_agent(spec)
+
+    assert (memory_root / "test_memory.db").exists()
+    # The bug this regresses: the DB must not end up inside the sandbox
+    # the model's own file tools are rooted at.
+    assert not (sandbox_dir / "test_memory.db").exists()

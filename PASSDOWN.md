@@ -5,7 +5,30 @@
 
 ---
 
-## 2026-07-25 (latest) — External review response: sandbox trust boundary + quick-start fix
+## 2026-07-25 (latest) — Second-pass review response: memory trust boundary + guard hardening
+
+**Why this session happened:** Donnie shared a Gemini "recruiter lens" assessment of both repos, which — Gemini itself admitted when asked to actually trace code instead of pattern-match on repo names — was written without ever fetching the GitHub URLs; it hallucinated a description of Watchstander and missed that cosmoai-adept's README already had the Mermaid diagram it recommended adding. Rather than relay files back and forth with Gemini manually, a second independent Fable-model pass was run directly against six specific files Gemini had asked for (three per repo: the hazard/deconfliction/HITL modules in Watchstander, and the secrets loader / memory / core execution loop in cosmoai-adept) — cold, with no prior context, specifically to line-trace logic paths, exception handling, and trust boundaries rather than accept anything at face value.
+
+**What got found and verified before fixing (cosmoai-adept side):**
+- **The Phase 6.5 sandbox fix didn't fully close the trust boundary — memory had the same bug.** `build_agent()` called `make_checkpointer(spec.sandbox, spec.name)`, so the SQLite conversation-memory DB lived inside the exact directory the agent's own `safe_path()`-bound file tools operate in. `memory.py`'s docstring said the DB was "never in secrets, never in cloud sync" — true — without mentioning it *was* reachable by the model's own tools — not true, and the actual problem: a model could read another thread's conversation history via its own `read_file` tool, or corrupt its checkpoint DB via `write_file`.
+- **The sandbox guard added in Phase 6.5 had two fail-open gaps.** `_assert_no_model_controlled_sandbox()` used `getattr(schema, "model_fields", {})` — a Pydantic-v2-only attribute — so a v1-style schema (`__fields__`) silently returned an empty field set and passed uninspected; it also matched only the exact string `"sandbox"`, so a tool naming the same parameter `root` or `base_dir` would slip through. A security assertion should fail closed on "I can't tell," not pass by default — this did the opposite on both counts.
+- Two minor config.py issues in the same pass: a missing `.env` with no `AGENT_SECRETS_DIR` set silently leaves every `*_API_KEY` constant `None` (surfacing only as a confusing downstream auth error); `discord_channel_id()` raised an uncaught `ValueError` on a malformed env value, crashing the entrypoint at startup on a typo.
+
+**What got built:**
+- `config.py` gained `memory_path(agent_name)` (env-overridable via `MEMORY_<NAME>`, same pattern as `sandbox_path()`), defaulting to `./agent_memory/<agent>` — never a tool sandbox root for any agent. `build_agent()` now calls `make_checkpointer(memory_path(spec.name), spec.name)` instead of passing `spec.sandbox`.
+- `_assert_no_model_controlled_sandbox()` rewritten: raises on an uninspectable schema instead of silently passing; checks a small set of sandbox-root-like names (`sandbox`, `sandbox_dir`, `sandbox_path`, `root`, `root_dir`, `base_dir`) instead of one literal string.
+- `config.py`: a missing `.env` now prints a stderr warning at import time; `discord_channel_id()` catches the `ValueError` and returns `0` (same as unset) instead of crashing.
+- `.gitignore` gained `agent_memory/` alongside the existing `sandboxes/`.
+- 9 new tests: `tests/test_config.py` (new file — `memory_path()` vs `sandbox_path()` distinctness, env override, both `discord_channel_id()` fixes, the stderr-warning fix); `tests/test_agent.py` gained an alt-named-sandbox rejection test, an uninspectable-schema fail-closed test, and a test asserting the checkpoint DB lands outside the sandbox directory. 59/59 passing, up from 50.
+- ARCHITECTURE.md §4 (Security Model) and §5 (Memory Model) rewritten to explain why each fix exists; Known Debt gained the config silent-misconfiguration item (now partially mitigated); ADR-010/011/012 added. MIGRATION.md gained Phase 6.75.
+
+**Decided but not built:** did not change `config.py`'s underlying module-level-env-frozen-at-import design — the stderr warning makes a missing `.env` visible, it doesn't make the values reloadable without re-importing. Noted honestly in Known Debt rather than treated as fixed.
+
+**Open questions for next session:** is it worth formalizing "ask an independent reviewer to trace N specific files cold" as a repeatable pattern for this project, given it found real issues twice now (the Phase 6.5 sandbox fix, and this session's memory/guard fixes) that a docs-level read — including from other AI reviewers — both missed? Watchstander got the same treatment this session; see that repo's PASSDOWN.md.
+
+---
+
+## 2026-07-25 (earlier still) — External review response: sandbox trust boundary + quick-start fix
 
 **Where things stood coming in:** the two public repos (this one and `Watchstander`) went through an independent Fable-model code/architecture/security review, plus two external recruiter-perspective assessments (ChatGPT, Grok) that Donnie ran separately and brought back for comparison. Fable found two concrete, reproducible defects in this repo that the recruiter assessments — reading docs and READMEs rather than tracing code — had both praised uncritically: the "mechanical, tool-layer sandbox" claim, and (separately) a broken quick-start.
 
