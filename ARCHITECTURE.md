@@ -105,4 +105,4 @@ Threat: prompt injection via search results and other tool output landing in mod
 
 ## 11. Maintenance Rules
 
-Update this document when: a migration phase completes, a component is added, a decision changes, or debt is paid. If the doc and the code disagree, the doc is the bug. See [MIGRATION.md](MIGRATION.md) for how we got here and [PASSDOWN.md](PASSDOWN.md) for what's next.
+Update this document when: a migration phase completes, a component is added, a decision changes, or debt is paid. If the doc and the code disagree, the doc is the bug. See [MIGRATION.md](MIGRATION.md) for how we got here, [PASSDOWN.md](PASSDOWN.md) for what's next, and [AOSE.md](AOSE.md) for the adversarial-review discipline behind ADR-009 through ADR-012 specifically.

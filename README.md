@@ -144,6 +144,7 @@ tests/ full pytest suite, one file per module
 - [ARCHITECTURE.md](ARCHITECTURE.md) — component map, design principles, decision log
 - [MIGRATION.md](MIGRATION.md) — phased build history with a definition of done per phase
 - [PASSDOWN.md](PASSDOWN.md) — session-to-session handoff notes: what's done, what's next, open questions
+- [AOSE.md](AOSE.md) — the adversarial review discipline behind this repo's fixes, with real instances from its own history
 
 ## Installation
 
