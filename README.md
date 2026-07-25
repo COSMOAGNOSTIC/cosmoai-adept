@@ -3,7 +3,11 @@
 [![tests](https://github.com/COSMOAGNOSTIC/cosmoai-adept/actions/workflows/tests.yml/badge.svg)](https://github.com/COSMOAGNOSTIC/cosmoai-adept/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A LangGraph-based framework for building multiple independent AI agents (Discord bots, CLI tools, etc.) that share one core library. Originally extracted and generalized from a production multi-agent system that has run continuously in a real deployment for months.
+**A real-time spatial visualizer and telemetry dashboard for multi-agent systems**, built on a LangGraph-based framework for multiple independent AI agents (Discord bots, CLI tools, etc.) that share one core library. Originally extracted and generalized from a production multi-agent system that has run continuously in a real deployment for months.
+
+![Agent walking between tool stations in the Godot 4 visualizer, driven live by agent_core WebSocket events](docs/visualizer-demo.gif)
+
+Every model call and tool call `agent_core` makes is broadcast as a WebSocket event ([`agent_core/events.py`](agent_core/events.py)) and rendered live in a 2D top-down scene ([`visualizer/`](visualizer/README.md)) built in Godot 4 — the agent walks to the station for whichever tool it's calling and shows a speech bubble with what it's doing. It's the same telemetry a production on-call dashboard would show, just legible at a glance instead of buried in logs.
 
 ## Architecture
 
@@ -22,6 +26,11 @@ flowchart TB
         Sandbox["safe_path()<br/>sandbox wall"]
         Memory[("SQLite Checkpointer<br/>per-agent memory")]
         Tools["Pluggable Tool Library<br/>file I/O · search · TTS · weather · digest"]
+        Events["events.py<br/>WebSocket broadcaster"]
+    end
+
+    subgraph Viz["Live Visualizer (Godot 4)"]
+        Godot["2D spatial scene<br/>agent walks to tool stations"]
     end
 
     A1 --> Spec
@@ -31,6 +40,8 @@ flowchart TB
     Graph --> Sandbox
     Graph --> Memory
     Graph --> Tools
+    Graph --> Events
+    Events -. "ws://localhost:8080" .-> Godot
 ```
 
 Each entrypoint is a thin script that supplies an `AgentSpec` — the framework does the rest. Every compiled agent shares the same sandbox enforcement, memory backend, and tool library; nothing is duplicated per-agent.
@@ -61,6 +72,16 @@ print(result["messages"][-1].content)
 
 That's the whole contract: define an `AgentSpec`, hand it to `build_agent()`, and you get back a compiled, checkpointed LangGraph agent. Swap `system_prompt`, `tools`, and `sandbox` and you have a different agent — no framework code duplicated. `thread_id` scopes conversation memory, so a Discord channel ID or CLI session ID keeps each conversation's history separate within the same agent's SQLite database.
 
+A complete, runnable version of this pattern — with more tools and a REPL loop — lives in [`examples/cli_demo.py`](examples/cli_demo.py):
+
+```
+python examples/cli_demo.py
+```
+
+## Watch It Live
+
+`agent_core` broadcasts a WebSocket event on every model call and tool call — no configuration needed, it's a no-op until something connects. Open [`visualizer/`](visualizer/README.md) in Godot 4, run the main scene, then run the CLI demo (or [`visualizer/demo_broadcaster.py`](visualizer/demo_broadcaster.py) if you just want to see it move without an API key) and watch the agent walk between tool stations in real time.
+
 ## Core Architectural Principles
 
 **Spec-driven agents.** Every agent is defined by an `AgentSpec` - a name, system prompt, tool list, sandbox path, and model choice. `build_agent()` turns a spec into a compiled LangGraph ReAct graph. Adding a new agent means writing a spec and a thin entrypoint, not duplicating framework code.
@@ -71,7 +92,9 @@ That's the whole contract: define an `AgentSpec`, hand it to `build_agent()`, an
 
 **Tool-error recovery.** Tool failures are returned to the model as tool messages rather than raising, so the agent can see the error and retry or recover instead of crashing the whole run.
 
-**Pluggable tool library.** File I/O, activity logging with a pending-items list, web search, text-to-speech, weather lookups, and a scheduled digest pattern that pulls sandbox state plus live search results into one report are all implemented once and shared by every agent.
+**Pluggable tool library.** File I/O, activity logging with a pending-items list, web search, text-to-speech, weather lookups, and a scheduled digest pattern (`tools/digest.py`) that pulls sandbox state plus live search results into one report are all implemented once and shared by every agent.
+
+**Observable by default.** `events.py` broadcasts every model call and tool call over a WebSocket, so any front end — the bundled Godot visualizer, a web dashboard, a log aggregator — can watch an agent think without touching agent internals.
 
 ## Structure
 
@@ -80,12 +103,21 @@ agent_core/
 config.py environment-based configuration
 security.py safe_path sandbox wall
 agent.py AgentSpec consumer, ReAct graph factory
+events.py WebSocket event broadcaster
 memory.py SQLite checkpointer factory
 spec.py AgentSpec dataclass
 text.py content normalizer, chunk splitter
 tools/ one implementation per tool
+examples/ runnable thin entrypoints
+visualizer/ Godot 4 live spatial dashboard
 tests/ full pytest suite, one file per module
 ```
+
+## Project Docs
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — component map, design principles, decision log
+- [MIGRATION.md](MIGRATION.md) — phased build history with a definition of done per phase
+- [PASSDOWN.md](PASSDOWN.md) — session-to-session handoff notes: what's done, what's next, open questions
 
 ## Installation
 

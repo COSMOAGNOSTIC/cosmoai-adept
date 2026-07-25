@@ -14,6 +14,7 @@ setup(
         "tavily-python",
         "elevenlabs",
         "discord.py",
+        "websockets",
     ],
     extras_require={
         "dev": ["pytest"],
