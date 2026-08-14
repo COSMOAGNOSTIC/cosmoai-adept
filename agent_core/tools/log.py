@@ -1,8 +1,7 @@
-import os
 from datetime import datetime
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from agent_core.security import safe_path
+from agent_core.security import safe_open
 
 
 class LogInput(BaseModel):
@@ -32,27 +31,25 @@ def make_log_tools(sandbox: str):
     @tool(args_schema=LogInput)
     def write_log(entry: str) -> str:
         """Append a timestamped entry to the agent activity log."""
-        path = safe_path(sandbox, "activity_log.txt")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(path, "a", encoding="utf-8") as f:
+        with safe_open(sandbox, "activity_log.txt", "a") as f:
             f.write(f"[{timestamp}] {entry}\n")
         return f"Logged: {entry}"
 
     @tool(args_schema=PendingInput)
     def read_pending() -> str:
         """Read all pending items."""
-        path = safe_path(sandbox, "pending.txt")
-        if not os.path.exists(path):
+        try:
+            with safe_open(sandbox, "pending.txt", "r") as f:
+                content = f.read().strip()
+        except FileNotFoundError:
             return "No pending items."
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
         return content if content else "No pending items."
 
     @tool(args_schema=AddPendingInput)
     def add_pending(item: str) -> str:
         """Add a new pending item."""
-        path = safe_path(sandbox, "pending.txt")
-        with open(path, "a", encoding="utf-8") as f:
+        with safe_open(sandbox, "pending.txt", "a") as f:
             f.write(f"{item}\n")
         return f"Added: {item}"
 
@@ -62,15 +59,15 @@ def make_log_tools(sandbox: str):
         Remove a single completed pending item by its 1-based line number.
         Only removes the specified item - all others are preserved.
         """
-        path = safe_path(sandbox, "pending.txt")
-        if not os.path.exists(path):
+        try:
+            with safe_open(sandbox, "pending.txt", "r") as f:
+                lines = [l.rstrip("\n") for l in f.readlines()]
+        except FileNotFoundError:
             return "No pending items."
-        with open(path, "r", encoding="utf-8") as f:
-            lines = [l.rstrip("\n") for l in f.readlines()]
         if item_number < 1 or item_number > len(lines):
             return f"Invalid item number: {item_number}. There are {len(lines)} items."
         removed = lines.pop(item_number - 1)
-        with open(path, "w", encoding="utf-8") as f:
+        with safe_open(sandbox, "pending.txt", "w") as f:
             f.write("\n".join(lines) + ("\n" if lines else ""))
         return f"Completed: {removed}"
 
