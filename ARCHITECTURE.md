@@ -1,7 +1,7 @@
 # cosmoai-adept — Architecture
 
 > **Status:** Living document. Update when a decision changes, a component is added/removed, or a migration phase completes.
-> **Last updated:** 2026-08-14 — marker-id rendering bug fixed (ADR-013), Known Debt reprioritized by severity tier
+> **Last updated:** 2026-08-14 (later same day) — symlink TOCTOU race in `safe_path()` closed via `safe_open()` (ADR-014), eval harness promoted above tier order
 
 ## 1. Purpose and Scope
 
@@ -23,7 +23,7 @@ Out of scope: any specific deployment's prompts, credentials, or private tool in
 | Module | Responsibility |
 |---|---|
 | `config.py` | All settings from environment variables, never hardcoded |
-| `security.py` | `safe_path()` — sandbox wall, `realpath` before prefix check |
+| `security.py` | `safe_path()` — sandbox wall, `realpath` before prefix check; `safe_open()` — opens a validated path with `O_NOFOLLOW` + a post-open fd re-check, closing the TOCTOU gap `safe_path()` alone leaves open |
 | `agent.py` | `build_agent(spec)` — ReAct graph factory, checkpointer wiring, tool-error recovery, event emission, approval gate, backend selection |
 | `events.py` | Lazy-started WebSocket broadcaster for live telemetry |
 | `approvals.py` | Human-in-the-loop approval hook, defaults to a blocking CLI y/N prompt |
@@ -45,7 +45,7 @@ Threat: prompt injection via search results and other tool output landing in mod
 
 | Surface | Control |
 |---|---|
-| File writes/reads | `safe_path` sandbox wall — rejects `..`, absolute paths, symlink escape, **within** whatever root it's given |
+| File writes/reads | `safe_open()` — validates via `safe_path` (rejects `..`, absolute paths, symlink escape, **within** whatever root it's given), then opens with `O_NOFOLLOW` and re-validates the opened fd's real path before handing it back, closing the check-to-open TOCTOU gap plain `safe_path()`-then-`open()` left (see ADR-014) |
 | Sandbox root selection | Bound once at tool-construction time via each `tools/*.py` module's `make_*_tools(sandbox)` factory (see `agent_core/tools/files.py`), never accepted as a tool argument. `agent.py`'s `_assert_no_model_controlled_sandbox()` enforces this at `build_agent()` time — a tool exposing any of a small set of sandbox-root-like field names (`sandbox`, `sandbox_dir`, `root`, `base_dir`, etc.) raises before the agent is built, and a tool whose schema this guard can't even introspect raises too, rather than silently passing |
 | Tool failures | Returned as `ToolMessage`s, never raised into the graph |
 | Telemetry | `events.py` broadcasts operational metadata (tool names, timestamps, short text previews) only — never full tool arguments or raw file contents |
@@ -54,7 +54,7 @@ Threat: prompt injection via search results and other tool output landing in mod
 
 **The guard itself had two fail-open gaps, since fixed (ADR-011).** A second, more targeted Fable review pass — asked to trace `agent.py` line by line rather than read this document — found the original guard used `getattr(schema, "model_fields", {})`, a Pydantic-v2-only attribute; a v1-style schema (`__fields__`) or any other uninspectable shape silently returned an empty field set and passed uninspected. It also matched only the exact string `"sandbox"`, so a tool naming the same parameter `root` or `base_dir` slipped through. Both are the wrong failure direction for a security assertion — "I can't tell" should raise, not pass. Fixed: an uninspectable schema now raises, and a small set of known sandbox-root-like names is checked instead of one literal string.
 
-**Known limitation, not yet fixed:** `safe_path()` resolves symlinks via `realpath()` at check time, but the file is opened afterward — a TOCTOU race exists if something could swap a symlink into the sandbox between the check and the open. Low practical risk in the current single-process, locally-run design, but tracked honestly in Known Debt below rather than silently left out of this doc.
+**Formerly a known limitation, closed 2026-08-14 (ADR-014):** `safe_path()` resolves symlinks via `realpath()` at check time, but every tool used to hand the resulting string to a plain `open()` afterward — a TOCTOU race existed if something swapped a symlink into the sandbox between the check and the open. `agent_core.security.safe_open()` now does both the check and the open together: `O_NOFOLLOW` makes the `open()` syscall itself refuse a symlinked final path component (no window to race, since the kernel does it atomically), and a post-open re-check of the opened fd's real path via `/proc/self/fd/<fd>` catches a symlink swapped into an *intermediate* directory component, which `O_NOFOLLOW` alone doesn't cover. Every tool that opens a file (`tools/files.py`, `tools/log.py`, `tools/digest.py`, `tools/tts.py`) now goes through `safe_open()` instead of `safe_path()` + a plain `open()`.
 
 ## 5. Memory Model
 
@@ -80,9 +80,15 @@ Reprioritized 2026-08-14 by severity tier, not just accumulation order: **securi
 
 ### Tier 1 — Security
 
+No open items. The only Tier 1 item, the symlink TOCTOU race in `safe_path()`, was closed the same day it was tiered — see ADR-014 and §4 above.
+
+### Priority override — Eval harness
+
+Donnie explicitly pulled this above tier order on 2026-08-14, right after Tier 1 closed, on the basis that it'll become "instantly useful" once it exists. It doesn't strictly belong ahead of Tiers 2–4 by the security → works → stable → designed-as-intended ordering above — it isn't broken, stuck, or misbehaving, so by that ordering alone it would sit in Tier 5 — but a direct, explicit priority call from the project owner overrides the mechanical tier order, and that's noted here rather than silently reordering the tiers to match after the fact.
+
 | Item | Notes |
 |---|---|
-| Symlink TOCTOU race in `safe_path()` | Resolved at check time, opened afterward — a narrow window exists between the two. Low risk in the current single-process design; would need re-validation post-open (or `O_NOFOLLOW`) to close fully |
+| Eval harness | Scripted scenarios scoring agent output quality — flagged by three independent reviewers (Fable, and two external recruiter-perspective AI assessments) as the single highest-leverage next investment, and now the explicit next thing to build per Donnie's 2026-08-14 call |
 
 ### Tier 2 — The code works
 
@@ -109,7 +115,6 @@ Reprioritized 2026-08-14 by severity tier, not just accumulation order: **securi
 | Visualizer doesn't fully hit the mark yet | Flagged 2026-08-14: the live Godot visualizer and the newer `docs/architecture-diagram.html` page both work correctly, but neither is polished enough yet — "we can afford to add a little polish." No specific direction scoped yet (motion/easing pass on the Godot side, spacing/typography pass on the diagram page, or both); this is a placeholder to come back to, not a design spec |
 | History windowing | Long threads will eventually need summarize-and-truncate |
 | Event schema versioning | No `schema_version` field yet — fine at one consumer, needed before a second |
-| Eval harness | Scripted scenarios scoring agent output quality — flagged by three independent reviewers (Fable, and two external recruiter-perspective AI assessments) as the single highest-leverage next investment. Tiered here because it isn't itself broken, stuck, or misbehaving — it's an investment gap, not a defect — but that reviewer consensus is worth weighing against strict tier order when picking what to build next |
 
 ## 10. Decision Log
 
@@ -128,6 +133,7 @@ Reprioritized 2026-08-14 by severity tier, not just accumulation order: **securi
 | ADR-011 | 2026-07-25 | `_assert_no_model_controlled_sandbox()` hardened to fail closed on an uninspectable `args_schema` and to check a small set of sandbox-root-like field names instead of the single literal string `"sandbox"` | The same review pass found the original guard used a Pydantic-v2-only attribute lookup that silently passed (empty field set) on any schema shape it couldn't introspect, and matched only one exact field name — both are the wrong failure direction for a security assertion |
 | ADR-012 | 2026-07-25 | `config.py` warns on stderr when no `.env` is found, and `discord_channel_id()` degrades to `0` on a malformed value instead of raising | Same review pass: a missing `.env` used to fail silently (every API key `None`, surfacing only as a confusing downstream auth error) and a typo'd channel-id env var crashed the entrypoint outright at import time — neither is the behavior a config loader should have on bad input |
 | ADR-013 | 2026-08-14 | `docs/architecture-diagram.html`'s SVG `<marker>` and `<linearGradient>` element ids renamed from the `my-svg…` prefix `mmdc` originally generated to match the root `id="adept-svg"` rename | A self-audit run right after publishing the page (prompted by "any known debt here?") found the id-rename script had renamed the root `<svg>` id and every `url(#adept-svg…)` reference to it, but not the marker/gradient elements' own `id` attributes — so every `marker-end="url(#adept-svg_flowchart-v2-pointEnd)"` pointed at nothing and arrowheads silently failed to render, with no console error. Fixed by renaming all 12 marker ids and the 1 gradient id to match; verified by confirming zero unresolved `url(#...)` references and by a rendered screenshot showing arrowheads present |
+| ADR-014 | 2026-08-14 (later same day) | New `agent_core.security.safe_open()` closes the `safe_path()` TOCTOU race: `O_NOFOLLOW` on the `open()` syscall itself, plus a post-open re-check of the opened fd's real path via `/proc/self/fd/<fd>`. `tools/files.py`, `tools/log.py`, `tools/digest.py`, and `tools/tts.py` all switched from `safe_path()` + a plain `open()` to `safe_open()` | Direct request from the project owner to close the one open Tier 1 (security) item once Known Debt was tiered by severity. `safe_path()`'s `realpath()` check already caught a symlink that existed *at check time*; the gap was specifically a symlink appearing *between* that check and a later plain `open()` call. `O_NOFOLLOW` closes the final-path-component half of that gap atomically at the syscall level; the fd re-check closes the intermediate-directory-component half, which `O_NOFOLLOW` alone doesn't cover. 11 new tests added (`tests/test_security.py`, `tests/test_files.py`), including one that simulates the actual race via `monkeypatch` (symlink introduced *after* `safe_path()`'s check has already passed) rather than only testing a symlink that's already in place before the call — the pre-placed-symlink tests alone would have passed even against the old, unfixed code, since `safe_path()`'s own `realpath()` resolution already caught those |
 
 ## 11. Maintenance Rules
 
