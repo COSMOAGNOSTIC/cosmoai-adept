@@ -5,7 +5,23 @@
 
 ---
 
-## 2026-07-25 (latest) — Second-pass review response: memory trust boundary + guard hardening
+## 2026-08-14 (latest) — Watchstander → cosmoai-adept parity reconciliation
+
+**Why this session happened:** a Watchstander session diffed its own live `main` against a fresh clone of this repo's live `main` and found six polish/process items Watchstander had picked up over the prior week that this repo hadn't. That passdown was delivered as the first message in a fresh session here and acted on directly.
+
+**What got built:**
+- `docs/architecture-diagram.html` — standalone, GitHub-Pages-hosted version of the README's Mermaid diagram, styled to match Watchstander's page (dark theme, legend, per-node explanation cards). The diagram SVG is pre-rendered and embedded inline (via `mmdc`/Puppeteer against the repo's own pinned Chromium), not client-side-rendered Mermaid — same reliability reasoning as Watchstander's copy.
+- README.md's Mermaid diagram color-coded by subsystem (`classDef` per Entrypoints/Core/gate-nodes/Models/Viz), matching Watchstander's functional-color convention. Edge labels were already correctly quoted going in — no `|"label with (parens)"|`-style fix needed here, unlike Watchstander's history.
+- `docs/prompts/aose-auditor-prompt.md` committed — the working AOSE-auditor system prompt, written repo-agnostic (not Watchstander-specific) so it can be pointed at any codebase's files cold, with a closing note tying it back to this repo's own ADR-009 through ADR-012 review history.
+- This entry, plus the three process notes folded into the Culture note below (sync discipline, lost-patch rule, secret-scan habit) — all three were documented in Watchstander but not yet written down here, despite the same multi-session, multi-machine pattern applying equally to both repos.
+
+**Not done in this session, needs a manual step:** GitHub Pages itself has to be enabled by hand — Settings → Pages → Deploy from branch → `main` → `/docs`. The diagram page and README link are only live once that's flipped. **Do this before treating Gap 1 as closed** — a relative link to an unpublished `.html` file resolves to GitHub's raw blob view, not a rendered page, which is the exact bug this fix exists to avoid repeating.
+
+**Open questions for next session:** none blocking. Watch for the same drift happening in reverse — periodically diff this repo's `main` against Watchstander's the same way this session did, rather than only pushing parity checks one direction.
+
+---
+
+## 2026-07-25 — Second-pass review response: memory trust boundary + guard hardening
 
 **Why this session happened:** Donnie shared a Gemini "recruiter lens" assessment of both repos, which — Gemini itself admitted when asked to actually trace code instead of pattern-match on repo names — was written without ever fetching the GitHub URLs; it hallucinated a description of Watchstander and missed that cosmoai-adept's README already had the Mermaid diagram it recommended adding. Rather than relay files back and forth with Gemini manually, a second independent Fable-model pass was run directly against six specific files Gemini had asked for (three per repo: the hazard/deconfliction/HITL modules in Watchstander, and the secrets loader / memory / core execution loop in cosmoai-adept) — cold, with no prior context, specifically to line-trace logic paths, exception handling, and trust boundaries rather than accept anything at face value.
 
@@ -120,3 +136,18 @@
 - Worth adding a `schema_version` field to events now, before Phase 5, since it's a one-line change and much cheaper before a second consumer exists?
 
 **Culture note — apply this going forward, on every project:** every repo gets `MIGRATION.md` (phased build history, DoD per phase), `ARCHITECTURE.md` (present-tense living doc, decision log), and `PASSDOWN.md` (this file — session log, updated every sitting). The point is that "done" has a written definition and picking the project back up after months away doesn't require reconstructing context from git log.
+
+**Sync discipline — added 2026-08-14, earned via Watchstander's real doc-drift incidents.** Before touching anything in a fresh session on this repo, reconcile local state against this file first:
+
+```
+git fetch origin
+git status
+git log --oneline -5
+git branch -a
+```
+
+Compare the result against this PASSDOWN's latest entry before assuming it's accurate — a session that skips this step is working from whatever it remembers, not from what's actually on `main`. This matters more on this project specifically because it's worked from multiple machines/sessions, the same pattern that bit Watchstander three times before the rule got written down.
+
+**Lost-patch rule — added 2026-08-14, same root cause as the sync-discipline note above.** Watchstander lost a real, working patch twice because it was delivered chat-only and never saved to disk. Standing rule: every patch that matters gets saved to disk and delivered as a real file in the same session it's built — no exceptions, no "I'll paste it again if you need it."
+
+**Secret-scan habit — added 2026-08-14.** Watchstander found a real secret (an API key file) sitting untracked in a repo folder before it got committed. Since this repo is also public: check `git status` for anything secret-shaped (`.env`, `*key*`, `*token*`, `*credential*` file names) before every `git add .`, not just before the first commit of a session.
