@@ -1,9 +1,8 @@
-import os
 from datetime import datetime
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from tavily import TavilyClient
-from agent_core.security import safe_path
+from agent_core.security import safe_open
 from agent_core.config import TAVILY_API_KEY
 
 
@@ -47,20 +46,18 @@ def make_digest_tool(sandbox: str):
         now = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
         sections = [f"# Digest\n{now}\n"]
 
-        pending_path = safe_path(sandbox, "pending.txt")
-        if os.path.exists(pending_path):
-            with open(pending_path, "r", encoding="utf-8") as f:
+        try:
+            with safe_open(sandbox, "pending.txt", "r") as f:
                 pending = f.read().strip()
             sections.append(f"## Pending Items\n{pending}" if pending else "## Pending Items\nNone.")
-        else:
+        except FileNotFoundError:
             sections.append("## Pending Items\nNone.")
 
-        log_path = safe_path(sandbox, "activity_log.txt")
-        if os.path.exists(log_path):
-            with open(log_path, "r", encoding="utf-8") as f:
+        try:
+            with safe_open(sandbox, "activity_log.txt", "r") as f:
                 recent = "".join(f.readlines()[-10:]).strip()
             sections.append(f"## Recent Activity\n{recent}" if recent else "## Recent Activity\nNo log entries yet.")
-        else:
+        except FileNotFoundError:
             sections.append("## Recent Activity\nNo log entries yet.")
 
         sections.append(_get_news(topic))
