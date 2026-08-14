@@ -77,7 +77,10 @@ def test_file_tool_blocks_symlink_swapped_into_sandbox(tmp_path):
     sandbox.mkdir()
     secret = tmp_path / "secret.txt"
     secret.write_text("classified")
-    (sandbox / "note.txt").symlink_to(secret)
+    try:
+        (sandbox / "note.txt").symlink_to(secret)
+    except OSError as e:
+        pytest.skip(f"cannot create symlinks in this environment: {e}")
 
     read_file, write_file, list_files = make_file_tools(str(sandbox))
     with pytest.raises(ValueError):
