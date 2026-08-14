@@ -2,7 +2,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from elevenlabs.client import ElevenLabs
 from agent_core.config import ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
-from agent_core.security import safe_path
+from agent_core.security import safe_open, safe_path
 
 
 class TTSInput(BaseModel):
@@ -22,7 +22,7 @@ def make_tts_tool(sandbox: str):
     def text_to_speech(text: str, filename: str, speed: float = 1.2) -> str:
         """Convert text to speech and save as an mp3 in the agent's sandbox."""
         client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        output_path = safe_path(sandbox, filename)
+        safe_path(sandbox, filename)  # fail fast on a bad filename before spending an API call
         try:
             audio = client.text_to_speech.convert(
                 voice_id=ELEVENLABS_VOICE_ID,
@@ -30,7 +30,7 @@ def make_tts_tool(sandbox: str):
                 model_id="eleven_monolingual_v1",
                 voice_settings={"speed": speed},
             )
-            with open(output_path, "wb") as f:
+            with safe_open(sandbox, filename, "wb") as f:
                 for chunk in audio:
                     f.write(chunk)
             return f"Audio saved: {filename}"
