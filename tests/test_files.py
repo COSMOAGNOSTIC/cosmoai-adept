@@ -61,6 +61,32 @@ def test_file_tools_do_not_accept_a_sandbox_argument(tmp_path):
         assert "sandbox" not in field_names
 
 
+def test_file_tool_blocks_symlink_swapped_into_sandbox(tmp_path):
+    """
+    read_file/write_file now go through agent_core.security.safe_open()
+    instead of safe_path()-then-plain-open(). A symlink already sitting
+    at the target path is caught here too (this is a sanity check, not
+    proof of the fix by itself - safe_path()'s own realpath resolution
+    already caught a pre-existing symlink even before this session's
+    fix). The actual TOCTOU-race regression test - the symlink appearing
+    *after* the safe_path() check has already passed, which the old
+    plain-open() code would have silently followed - lives in
+    tests/test_security.py::test_safe_open_closes_the_actual_toctou_race.
+    """
+    sandbox = tmp_path / "box"
+    sandbox.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("classified")
+    (sandbox / "note.txt").symlink_to(secret)
+
+    read_file, write_file, list_files = make_file_tools(str(sandbox))
+    with pytest.raises(ValueError):
+        read_file.invoke({"filename": "note.txt"})
+    with pytest.raises(ValueError):
+        write_file.invoke({"filename": "note.txt", "content": "overwritten"})
+    assert secret.read_text() == "classified"
+
+
 def test_two_sandboxes_are_isolated(tmp_path):
     """Two agents built with different sandboxes never see each other's files."""
     box_a = tmp_path / "a"
