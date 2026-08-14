@@ -1,0 +1,196 @@
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="UTF-8"&gt;
+&lt;title&gt;cosmoai-adept — System Architecture&lt;/title&gt;
+&lt;style&gt;
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --dim: #8b949e;
+    --entry: #58a6ff;
+    --core: #7ee787;
+    --gate: #ff7b72;
+    --model: #d2a8ff;
+    --viz: #d4a72c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding: 48px 6vw;
+  }
+  header {
+    max-width: 1600px;
+    margin: 0 auto 32px auto;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+  }
+  h1 {
+    font-size: 2.4rem;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    color: var(--dim);
+    font-size: 1.1rem;
+    max-width: 900px;
+    line-height: 1.5;
+  }
+  .meta {
+    margin-top: 16px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: var(--dim);
+  }
+  .meta span b { color: var(--text); }
+
+  .legend {
+    max-width: 1600px;
+    margin: 0 auto 32px auto;
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    font-size: 0.95rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 10px; }
+  .swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+
+  .diagram-wrap {
+    max-width: 1600px;
+    margin: 0 auto 40px auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    overflow-x: auto;
+  }
+  .diagram-wrap svg { width: 100%; height: auto; min-width: 1100px; display: block; }
+
+  .explain {
+    max-width: 1600px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--entry);
+    border-radius: 10px;
+    padding: 20px 22px;
+  }
+  .card.core { border-left-color: var(--core); }
+  .card.gate { border-left-color: var(--gate); }
+  .card.model { border-left-color: var(--model); }
+  .card.viz { border-left-color: var(--viz); }
+  .card h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.05rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .card p {
+    margin: 0;
+    color: var(--dim);
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+  .card p code {
+    color: var(--text);
+    background: rgba(110,118,129,0.15);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.88em;
+  }
+
+  footer {
+    max-width: 1600px;
+    margin: 40px auto 0 auto;
+    color: var(--dim);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;header&gt;
+  &lt;h1&gt;cosmoai-adept — System Architecture&lt;/h1&gt;
+  &lt;div class="subtitle"&gt;
+    &lt;code style="color:inherit"&gt;agent_core&lt;/code&gt; is the hub-and-spoke engine every COSMO family agent
+    (Discord bot, CLI tool, scheduled job) is built on top of: one shared library supplying checkpointed
+    memory, sandbox enforcement, human-in-the-loop approval gates, and live WebSocket telemetry, so each
+    entrypoint only has to define what makes it different.
+  &lt;/div&gt;
+  &lt;div class="meta"&gt;
+    &lt;span&gt;&lt;b&gt;Sandbox:&lt;/b&gt; &lt;code style="color:inherit"&gt;safe_path()&lt;/code&gt; bound at construction time, never model-supplied (ADR-009)&lt;/span&gt;
+    &lt;span&gt;&lt;b&gt;Memory:&lt;/b&gt; per-agent SQLite checkpointer, isolated from tool-accessible sandbox roots&lt;/span&gt;
+    &lt;span&gt;&lt;b&gt;Backend:&lt;/b&gt; Claude API or any OpenAI-compatible local server, selected in &lt;code style="color:inherit"&gt;AgentSpec&lt;/code&gt;&lt;/span&gt;
+  &lt;/div&gt;
+&lt;/header&gt;
+
+&lt;div class="legend"&gt;
+  &lt;div class="legend-item"&gt;&lt;div class="swatch" style="background:var(--entry)"&gt;&lt;/div&gt; Thin entrypoints&lt;/div&gt;
+  &lt;div class="legend-item"&gt;&lt;div class="swatch" style="background:var(--core)"&gt;&lt;/div&gt; agent_core pipeline&lt;/div&gt;
+  &lt;div class="legend-item"&gt;&lt;div class="swatch" style="background:var(--gate)"&gt;&lt;/div&gt; Security / HITL gate&lt;/div&gt;
+  &lt;div class="legend-item"&gt;&lt;div class="swatch" style="background:var(--model)"&gt;&lt;/div&gt; Model backend&lt;/div&gt;
+  &lt;div class="legend-item"&gt;&lt;div class="swatch" style="background:var(--viz)"&gt;&lt;/div&gt; Live visualizer&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;div class="diagram-wrap"&gt;
+PLACEHOLDER_SVG_INJECT
+&lt;/div&gt;
+
+&lt;div class="explain"&gt;
+  &lt;div class="card"&gt;
+    &lt;h3&gt;AgentSpec → build_agent()&lt;/h3&gt;
+    &lt;p&gt;Every entrypoint (&lt;code&gt;Discord Bot&lt;/code&gt;, &lt;code&gt;CLI Tool&lt;/code&gt;, or anything future) supplies one &lt;code&gt;AgentSpec&lt;/code&gt; — name, system prompt, tools, sandbox root, model backend. &lt;code&gt;build_agent(spec)&lt;/code&gt; compiles it into an executable LangGraph ReAct agent. Write the agent-specific bits once; get checkpointed memory, sandboxing, approval gates, and telemetry for free.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card"&gt;
+    &lt;h3&gt;Compiled LangGraph ReAct Agent&lt;/h3&gt;
+    &lt;p&gt;The runtime graph. Tool calls route through an &lt;code&gt;execute_tools&lt;/code&gt; gate; failed tools return a &lt;code&gt;ToolMessage&lt;/code&gt; the model can reason about and recover from, never a raw exception that crashes the run.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card gate"&gt;
+    &lt;h3&gt;safe_path() — sandbox wall&lt;/h3&gt;
+    &lt;p&gt;Rejects path traversal and symlink escape within a sandbox root that is bound once, at tool-construction time, by whoever builds the &lt;code&gt;AgentSpec&lt;/code&gt; — never accepted as a model-supplied argument. &lt;code&gt;_assert_no_model_controlled_sandbox()&lt;/code&gt; exists specifically to guard the regression (ADR-009).&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card gate"&gt;
+    &lt;h3&gt;approvals.py — human-in-the-loop gate&lt;/h3&gt;
+    &lt;p&gt;High-risk actions are gated mechanically, not by prompt instruction. A tool name listed in &lt;code&gt;approval_required&lt;/code&gt; pauses for a human decision at the tool-execution layer, the same layer &lt;code&gt;safe_path()&lt;/code&gt; lives in.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card"&gt;
+    &lt;h3&gt;SQLite Checkpointer — per-agent memory&lt;/h3&gt;
+    &lt;p&gt;One database per agent, scoped by &lt;code&gt;thread_id&lt;/code&gt;, deliberately kept out of the sandbox root a model's own file tools can reach — a model can't read another thread's history or corrupt its own checkpoint state through &lt;code&gt;write_file&lt;/code&gt;.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card"&gt;
+    &lt;h3&gt;Pluggable Tool Library&lt;/h3&gt;
+    &lt;p&gt;File I/O, logging, web search, weather, TTS, and digest generation — all least-privilege, all declaring exactly the inputs they need, nothing reaching outside its sandbox by default.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card"&gt;
+    &lt;h3&gt;events.py — WebSocket broadcaster&lt;/h3&gt;
+    &lt;p&gt;Lazy-started: if nothing's listening, it's a no-op — zero cost, zero coupling. Every model and tool call broadcasts a telemetry event when something is.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card model"&gt;
+    &lt;h3&gt;Model Backend&lt;/h3&gt;
+    &lt;p&gt;&lt;code&gt;spec.backend&lt;/code&gt; selects &lt;code&gt;"anthropic"&lt;/code&gt; (cloud, default) or &lt;code&gt;"local"&lt;/code&gt; (any OpenAI-compatible local server, e.g. LM Studio). Only &lt;code&gt;_build_model()&lt;/code&gt; branches on this — graph, tools, memory, and telemetry are identical either way.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="card viz"&gt;
+    &lt;h3&gt;Live Visualizer (Godot 4)&lt;/h3&gt;
+    &lt;p&gt;A 2D top-down scene, fed live over WebSocket, where the agent walks to the station for whichever tool it's calling and shows a speech bubble with what it's doing — the same telemetry a production on-call dashboard would show, just legible at a glance instead of buried in logs.&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;footer&gt;
+  Source: &lt;a href="https://github.com/COSMOAGNOSTIC/cosmoai-adept" style="color:var(--dim)"&gt;github.com/COSMOAGNOSTIC/cosmoai-adept&lt;/a&gt; — MIT licensed. Diagram generated from the README's Mermaid source.
+&lt;/footer&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
