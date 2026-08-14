@@ -3,6 +3,20 @@ import pytest
 from agent_core.security import safe_open, safe_path
 
 
+def _symlink_or_skip(link_path, target):
+    """
+    Creating a symlink on Windows requires SeCreateSymbolicLinkPrivilege
+    (admin, or Developer Mode enabled) - a non-elevated shell raises
+    OSError [WinError 1314]. That's an environment limitation, not a
+    safe_open() bug, so these tests skip rather than fail when the
+    environment can't set up the scenario they're testing.
+    """
+    try:
+        link_path.symlink_to(target)
+    except OSError as e:
+        pytest.skip(f"cannot create symlinks in this environment: {e}")
+
+
 def test_normal_file_stays_in_sandbox(tmp_path):
     base = str(tmp_path)
     result = safe_path(base, "activity_log.txt")
@@ -93,7 +107,7 @@ def test_safe_open_rejects_symlink_at_final_component_for_read(tmp_path):
     base.mkdir()
     outside = tmp_path / "secret.txt"
     outside.write_text("classified")
-    (base / "note.txt").symlink_to(outside)
+    _symlink_or_skip(base / "note.txt", outside)
 
     with pytest.raises(ValueError):
         safe_open(str(base), "note.txt", "r")
@@ -103,7 +117,7 @@ def test_safe_open_rejects_symlink_at_final_component_for_write(tmp_path):
     base = tmp_path / "sandbox"
     base.mkdir()
     outside = tmp_path / "target.txt"
-    (base / "out.txt").symlink_to(outside)
+    _symlink_or_skip(base / "out.txt", outside)
 
     with pytest.raises(ValueError):
         safe_open(str(base), "out.txt", "w")
@@ -122,7 +136,7 @@ def test_safe_open_rejects_symlinked_intermediate_directory(tmp_path):
     outside_dir = tmp_path / "outside"
     outside_dir.mkdir()
     (outside_dir / "secret.txt").write_text("classified")
-    (base / "sub").symlink_to(outside_dir)
+    _symlink_or_skip(base / "sub", outside_dir)
 
     with pytest.raises(ValueError):
         safe_open(str(base), os.path.join("sub", "secret.txt"), "r")
@@ -167,7 +181,7 @@ def test_safe_open_closes_the_actual_toctou_race(tmp_path, monkeypatch):
 
     def racing_safe_path(b, filename):
         result = real_safe_path(b, filename)  # passes - nothing symlinked yet
-        (base / "note.txt").symlink_to(outside)  # attacker wins the race here
+        _symlink_or_skip(base / "note.txt", outside)  # attacker wins the race here
         return result
 
     monkeypatch.setattr(security_module, "safe_path", racing_safe_path)
