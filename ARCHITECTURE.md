@@ -1,7 +1,7 @@
 # cosmoai-adept — Architecture
 
 > **Status:** Living document. Update when a decision changes, a component is added/removed, or a migration phase completes.
-> **Last updated:** 2026-07-25 (later same day — sandbox trust-boundary fix, see ADR-009)
+> **Last updated:** 2026-08-14 — marker-id rendering bug fixed (ADR-013), Known Debt reprioritized by severity tier
 
 ## 1. Purpose and Scope
 
@@ -76,15 +76,40 @@ Threat: prompt injection via search results and other tool output landing in mod
 
 ## 9. Known Debt
 
+Reprioritized 2026-08-14 by severity tier, not just accumulation order: **security → the code works → the code is stable → everything works as designed → everything else.** An item's tier is what it would break if left alone, not how old or how annoying it is. The marker-id rendering bug that used to live in this section (broken arrowheads on `docs/architecture-diagram.html`) was found and fixed the same session this reprioritization happened — see ADR-013 — and is no longer open debt.
+
+### Tier 1 — Security
+
 | Item | Notes |
 |---|---|
+| Symlink TOCTOU race in `safe_path()` | Resolved at check time, opened afterward — a narrow window exists between the two. Low risk in the current single-process design; would need re-validation post-open (or `O_NOFOLLOW`) to close fully |
+
+### Tier 2 — The code works
+
+| Item | Notes |
+|---|---|
+| `config.py` silent-misconfiguration risk (partially mitigated) | If `AGENT_SECRETS_DIR` is unset and cwd isn't the repo root, every `*_API_KEY` constant resolves to `None`. Now emits a stderr warning at import time (see ADR-012) so the cause is visible immediately rather than surfacing only as a confusing auth error deep inside a model call — the underlying fragility (module-level env reads frozen at import time) is unchanged |
+
+### Tier 3 — The code is stable
+
+| Item | Notes |
+|---|---|
+| No dependency version pinning | `setup.py` has no version bounds and there's no lockfile — a fast-moving LangChain/LangGraph release could silently break the build between test runs |
+
+### Tier 4 — Everything works as designed
+
+| Item | Notes |
+|---|---|
+| Approval hook UX beyond CLI | `default_cli_approval_hook` only makes sense for interactive entrypoints; no Discord/Slack reference hook shipped yet |
+
+### Tier 5 — Everything else
+
+| Item | Notes |
+|---|---|
+| Visualizer doesn't fully hit the mark yet | Flagged 2026-08-14: the live Godot visualizer and the newer `docs/architecture-diagram.html` page both work correctly, but neither is polished enough yet — "we can afford to add a little polish." No specific direction scoped yet (motion/easing pass on the Godot side, spacing/typography pass on the diagram page, or both); this is a placeholder to come back to, not a design spec |
 | History windowing | Long threads will eventually need summarize-and-truncate |
 | Event schema versioning | No `schema_version` field yet — fine at one consumer, needed before a second |
-| Eval harness | Scripted scenarios scoring agent output quality — flagged by three independent reviewers (Fable, and two external recruiter-perspective AI assessments) as the single highest-leverage next investment |
-| Approval hook UX beyond CLI | `default_cli_approval_hook` only makes sense for interactive entrypoints; no Discord/Slack reference hook shipped yet |
-| Symlink TOCTOU race in `safe_path()` | Resolved at check time, opened afterward — a narrow window exists between the two. Low risk in the current single-process design; would need re-validation post-open (or `O_NOFOLLOW`) to close fully |
-| No dependency version pinning | `setup.py` has no version bounds and there's no lockfile — a fast-moving LangChain/LangGraph release could silently break the build between test runs |
-| `config.py` silent-misconfiguration risk (partially mitigated) | If `AGENT_SECRETS_DIR` is unset and cwd isn't the repo root, every `*_API_KEY` constant resolves to `None`. Now emits a stderr warning at import time (see ADR-012) so the cause is visible immediately rather than surfacing only as a confusing auth error deep inside a model call — the underlying fragility (module-level env reads frozen at import time) is unchanged |
+| Eval harness | Scripted scenarios scoring agent output quality — flagged by three independent reviewers (Fable, and two external recruiter-perspective AI assessments) as the single highest-leverage next investment. Tiered here because it isn't itself broken, stuck, or misbehaving — it's an investment gap, not a defect — but that reviewer consensus is worth weighing against strict tier order when picking what to build next |
 
 ## 10. Decision Log
 
@@ -102,6 +127,7 @@ Threat: prompt injection via search results and other tool output landing in mod
 | ADR-010 | 2026-07-25 | Conversation-memory checkpointer moved from the agent's sandbox to a dedicated `config.memory_path()` directory that is never any agent's tool-accessible root | A second, more targeted Fable review pass (asked to trace `config.py`/`memory.py`/`agent.py` specifically, not read docs) found the checkpointer DB living inside the exact directory the model's own file tools operate in — a real information-leak and integrity risk, not just a naming inconsistency |
 | ADR-011 | 2026-07-25 | `_assert_no_model_controlled_sandbox()` hardened to fail closed on an uninspectable `args_schema` and to check a small set of sandbox-root-like field names instead of the single literal string `"sandbox"` | The same review pass found the original guard used a Pydantic-v2-only attribute lookup that silently passed (empty field set) on any schema shape it couldn't introspect, and matched only one exact field name — both are the wrong failure direction for a security assertion |
 | ADR-012 | 2026-07-25 | `config.py` warns on stderr when no `.env` is found, and `discord_channel_id()` degrades to `0` on a malformed value instead of raising | Same review pass: a missing `.env` used to fail silently (every API key `None`, surfacing only as a confusing downstream auth error) and a typo'd channel-id env var crashed the entrypoint outright at import time — neither is the behavior a config loader should have on bad input |
+| ADR-013 | 2026-08-14 | `docs/architecture-diagram.html`'s SVG `<marker>` and `<linearGradient>` element ids renamed from the `my-svg…` prefix `mmdc` originally generated to match the root `id="adept-svg"` rename | A self-audit run right after publishing the page (prompted by "any known debt here?") found the id-rename script had renamed the root `<svg>` id and every `url(#adept-svg…)` reference to it, but not the marker/gradient elements' own `id` attributes — so every `marker-end="url(#adept-svg_flowchart-v2-pointEnd)"` pointed at nothing and arrowheads silently failed to render, with no console error. Fixed by renaming all 12 marker ids and the 1 gradient id to match; verified by confirming zero unresolved `url(#...)` references and by a rendered screenshot showing arrowheads present |
 
 ## 11. Maintenance Rules
 
