@@ -13,11 +13,18 @@ Every model call and tool call `agent_core` makes is broadcast as a WebSocket ev
 
 ```mermaid
 flowchart TB
+    classDef entry fill:#1f6feb,stroke:#0d419d,color:#fff,stroke-width:1px
+    classDef core fill:#2da44e,stroke:#1a7f37,color:#fff,stroke-width:1px
+    classDef gate fill:#da3633,stroke:#8e1c1a,color:#fff,stroke-width:1px
+    classDef model fill:#8250df,stroke:#5a32a3,color:#fff,stroke-width:1px
+    classDef viz fill:#bf8700,stroke:#7d5700,color:#fff,stroke-width:1px
+
     subgraph Entrypoints["Thin Entrypoints"]
         A1["Discord Bot"]
         A2["CLI Tool"]
         A3["..."]
     end
+    class A1,A2,A3 entry
 
     subgraph Core["agent_core (shared library)"]
         Spec["AgentSpec<br/>name · prompt · tools · sandbox · model · backend"]
@@ -29,15 +36,19 @@ flowchart TB
         Tools["Pluggable Tool Library<br/>file I/O · search · TTS · weather · digest"]
         Events["events.py<br/>WebSocket broadcaster"]
     end
+    class Spec,Build,Graph,Memory,Tools,Events core
+    class Sandbox,Approval gate
 
     subgraph Models["Model Backend"]
         Anthropic["Claude API"]
         Local["Local server<br/>LM Studio, etc."]
     end
+    class Anthropic,Local model
 
     subgraph Viz["Live Visualizer (Godot 4)"]
         Godot["2D spatial scene<br/>agent walks to tool + approval stations"]
     end
+    class Godot viz
 
     A1 --> Spec
     A2 --> Spec
@@ -52,6 +63,8 @@ flowchart TB
     Graph -.-> Local
     Events -. "ws://localhost:8080" .-> Godot
 ```
+
+*A larger, annotated version of this diagram with a legend and per-node explanations lives at [`docs/architecture-diagram.html`](https://cosmoagnostic.github.io/cosmoai-adept/architecture-diagram.html) — open it directly in a browser.*
 
 Each entrypoint is a thin script that supplies an `AgentSpec` — the framework does the rest. Every compiled agent shares the same sandbox enforcement, memory backend, and tool library; nothing is duplicated per-agent.
 
